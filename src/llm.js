@@ -8,8 +8,13 @@ async function askLLM(failure, ruleVerdict) {
   const { LLM_BASE_URL, LLM_API_KEY, LLM_MODEL } = process.env;
   if (!LLM_BASE_URL || !LLM_API_KEY || !LLM_MODEL) return null;
 
+  // Never send the test title in eval mode: demo titles contain the answer
+  const title = process.env.LLM_OMIT_TITLE
+    ? undefined
+    : failure.title.replace(/^\[expect:\w+\]\s*/, "");
+
   const payload = {
-    test: failure.title,
+    test: title,
     error: failure.message,
     failedRequests: failure.network.slice(0, 5),
     lastConsoleLines: failure.console,
@@ -34,7 +39,10 @@ async function askLLM(failure, ruleVerdict) {
       }),
       signal: AbortSignal.timeout(20000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.log("[flake-radar] LLM error", res.status, await res.text());
+      return null;
+    }
 
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content ?? "";
